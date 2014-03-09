@@ -10,6 +10,13 @@
 #include <Wire.h>
 #include <Serial.h>
 
+struct { void(*loop_func)(); const char* name; } programs[] = {
+  {distance_loop,  "distance drive"},
+  {compas_loop,  "compas readout"},
+  {twitchy_loop, "twitchy simple demo"}
+};
+void(*current_loop_func)();
+
 void setup() {
   // reset motor controller, ensure it misses the servo pulse and puts itself in error mode
   delay(200);
@@ -33,9 +40,27 @@ void setup() {
   delay(500);
  
   Serial.println("welcome!");
+  
+  // print main programs and allow user to choose
+  for(size_t i = 0; i < (sizeof(programs)/sizeof(*programs)); ++i)
+  {
+    Serial.print(i);
+    Serial.print(") ");
+    Serial.println(programs[i].name);
+  }
+  delay(1500);
+  int prog = Serial.parseInt();
+  if (prog < 0 || prog >= (sizeof(programs)/sizeof(*programs)))
+    prog = 0;
+  current_loop_func = programs[prog].loop_func;
+  Serial.print("Invoking program #");
+  Serial.print(prog);
+  Serial.print(": ");
+  Serial.println(programs[prog].name);
+  delay(1000);
 }
 
-void loop()
+void distance_loop()
 {
   delay(10);
   
@@ -159,3 +184,26 @@ void twitchy_loop()
     Serial.print(distance_forward());
     Serial.println(" cm");
 }
+
+void compas_loop()
+{
+  delay(1000/30);
+  
+  compas_read();
+  
+  Serial.print("Compas: ");
+  Serial.print((int)compas_get_heading());
+  Serial.print(" [");
+  Serial.print(compas_get_x());
+  Serial.print("; ");
+  Serial.print(compas_get_y());
+  Serial.print("; ");
+  Serial.print(compas_get_z());
+  Serial.println("]");
+}
+
+void loop()
+{
+  current_loop_func();
+}
+
