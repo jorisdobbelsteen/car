@@ -7,21 +7,32 @@
 // Arduino (GCC-AVR)
 // Assumes that: char = 1 byte, int = 2 bytes, long = 4 bytes
 
+#include <Wire.h>
 #include <Serial.h>
 
 void setup() {
   // reset motor controller, ensure it misses the servo pulse and puts itself in error mode
   delay(200);
+
+  Serial.begin(57600);
+  Serial.print("Car ");
   
   drivetrain_setup();
   lights_setup();
   distance_setup();
+  // i2c and digital compas
+  Wire.begin();
+  compas_setup();
+  // SPI and radio
+  // SPI.begin();
+  // radio_setup();
 
-  Serial.begin(57600);
-  Serial.println("Car controller, welcome!");
+  Serial.print("controller, ");
 
   // stabilize motor controller, sync up with pulse
-  delay(3000);
+  delay(500);
+ 
+  Serial.println("welcome!");
 }
 
 void loop()
@@ -29,6 +40,10 @@ void loop()
   delay(10);
   
   unsigned char d = distance_forward();
+  
+  static unsigned char compas_delay = 0;
+  if ((compas_delay++ & 0xf) == 0) //period
+    compas_read();
   
   Serial.print("Distance: ~");
   Serial.print(d);
@@ -40,7 +55,15 @@ void loop()
   Serial.print(distance_raw_falling());
   Serial.print(" pins=");
   Serial.print(distance_raw_portstate());
-  Serial.println(")");
+  Serial.print(") Compas: ");
+  Serial.print((int)compas_get_heading());
+  Serial.print(" [");
+  Serial.print(compas_get_x());
+  Serial.print("; ");
+  Serial.print(compas_get_y());
+  Serial.print("; ");
+  Serial.print(compas_get_z());
+  Serial.println("]");
 
   const unsigned char T00 = 20;
   const unsigned char T0 = 25;
@@ -136,4 +159,3 @@ void twitchy_loop()
     Serial.print(distance_forward());
     Serial.println(" cm");
 }
-
