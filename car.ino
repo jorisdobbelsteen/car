@@ -10,10 +10,10 @@
 #include <Wire.h>
 #include <Serial.h>
 
-struct { void(*loop_func)(); const char* name; } programs[] = {
-  {distance_loop,  "distance drive"},
-  {compas_loop,  "compas readout"},
-  {twitchy_loop, "twitchy simple demo"}
+struct { void(*loop_func)(); void(*setup_func)(); const char* name; } programs[] = {
+  {distance_loop, NULL, "distance driving"},
+  {compas_calibration_loop, compas_calibration_setup, "compas calibration"},
+  {twitchy_loop, NULL, "simple 'twitchy' demo"}
 };
 void(*current_loop_func)();
 
@@ -30,6 +30,7 @@ void setup() {
   // i2c and digital compas
   Wire.begin();
   compas_setup();
+  compass_calibration_load_from_eeprom();
   // SPI and radio
   // SPI.begin();
   // radio_setup();
@@ -57,7 +58,13 @@ void setup() {
   Serial.print(prog);
   Serial.print(": ");
   Serial.println(programs[prog].name);
+  if(programs[prog].setup_func)
+    programs[prog].setup_func();
   delay(1000);
+}
+void loop()
+{
+  current_loop_func();
 }
 
 void distance_loop()
@@ -69,6 +76,9 @@ void distance_loop()
   static unsigned char compas_delay = 0;
   if ((compas_delay++ & 0xf) == 0) //period
     compas_read();
+  
+  // 0 = 0V; 1023 = 10V (5 volt, but we use a voltage divider /2)
+  int millivolt = analogRead(A0) * 10;
   
   Serial.print("Distance: ~");
   Serial.print(d);
@@ -88,7 +98,9 @@ void distance_loop()
   Serial.print(compas_get_y());
   Serial.print("; ");
   Serial.print(compas_get_z());
-  Serial.println("]");
+  Serial.print("] batt=");
+  Serial.print(millivolt);
+  Serial.println("mV");
 
   const unsigned char T00 = 20;
   const unsigned char T0 = 25;
@@ -183,27 +195,5 @@ void twitchy_loop()
     Serial.print("Distance: ~");
     Serial.print(distance_forward());
     Serial.println(" cm");
-}
-
-void compas_loop()
-{
-  delay(1000/30);
-  
-  compas_read();
-  
-  Serial.print("Compas: ");
-  Serial.print((int)compas_get_heading());
-  Serial.print(" [");
-  Serial.print(compas_get_x());
-  Serial.print("; ");
-  Serial.print(compas_get_y());
-  Serial.print("; ");
-  Serial.print(compas_get_z());
-  Serial.println("]");
-}
-
-void loop()
-{
-  current_loop_func();
 }
 

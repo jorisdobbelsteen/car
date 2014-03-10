@@ -12,12 +12,14 @@
 #include <Wire.h>
 
 static int heading;
-static char calibration_y;
-static char calibration_z;
-static unsigned char compas_data[6];
+static int offset_x;
+static int offset_y;
+static int offset_z;
+// need two multiplication values
+static unsigned char compas_data[6]; // data order is X, Z, Y.
 static int data_x() { return int(  ( ((unsigned int)compas_data[0]) << 8) | compas_data[1]  ); }
-static int data_y() { return int(  ( ((unsigned int)compas_data[2]) << 8) | compas_data[3]  ); }
-static int data_z() { return int(  ( ((unsigned int)compas_data[4]) << 8) | compas_data[5]  ); }
+static int data_y() { return int(  ( ((unsigned int)compas_data[4]) << 8) | compas_data[5]  ); }
+static int data_z() { return int(  ( ((unsigned int)compas_data[2]) << 8) | compas_data[3]  ); }
 
 #define HMC5883L_ADDRESS ((unsigned char)0x1E)
 #define REG_CONFIGA 0x00
@@ -60,6 +62,10 @@ static void compas_i2c_write(unsigned char reg, unsigned char data)
 
 void compas_setup()
 {
+  offset_x = 0;
+  offset_y = 0;
+  offset_z = 0;
+
   /*
    * Configure compas to provide continuous measurements and give frequent results.
    * TODO: Decide whether to use calibration routine
@@ -76,7 +82,29 @@ void compas_read()
   // read data
   compas_i2c_read(REG_DATA_BEGIN, compas_data, 6);
   // compute angle: [north, east, south, west] = [0, 64, -128, -64]
-  heading = compas_fast_arctan(data_z(), data_x());
+  heading = compas_fast_arctan(data_y() - offset_y, data_x() - offset_x);
+}
+
+void compas_set_calibration(int offx, int offy, int offz)
+{
+  offset_x = offx;
+  offset_y = offy;
+  offset_z = offz;
+}
+
+int compas_get_calibration_offset_x()
+{
+  return offset_x;
+}
+
+int compas_get_calibration_offset_y()
+{
+  return offset_y;
+}
+
+int compas_get_calibration_offset_z()
+{
+  return offset_z;
 }
 
 int compas_get_heading()
