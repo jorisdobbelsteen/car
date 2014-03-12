@@ -9,6 +9,7 @@
 
 #include <Wire.h>
 #include <Serial.h>
+#include <SPI.h>
 
 struct { void(*loop_func)(); void(*setup_func)(); const char* name; } programs[] = {
   {distance_loop, NULL, "distance driving"},
@@ -22,6 +23,7 @@ void setup() {
   delay(200);
 
   Serial.begin(57600);
+  printf_begin(); // RF24 uses this...
   Serial.print("Car ");
   
   drivetrain_setup();
@@ -32,8 +34,8 @@ void setup() {
   compas_setup();
   compass_calibration_load_from_eeprom();
   // SPI and radio
-  // SPI.begin();
-  // radio_setup();
+  SPI.begin();
+  radio_setup();
 
   Serial.print("controller, ");
 
@@ -64,6 +66,9 @@ void setup() {
 }
 void loop()
 {
+  // handle modules
+  radio_tick();
+  // run selected program
   current_loop_func();
 }
 
@@ -80,27 +85,31 @@ void distance_loop()
   // 0 = 0V; 1023 = 10V (5 volt, but we use a voltage divider /2)
   int millivolt = analogRead(A0) * 10;
   
-  Serial.print("Distance: ~");
-  Serial.print(d);
-  Serial.print(" cm (<-> ");
-  Serial.print(distance_raw_distance());
-  Serial.print(" / ");
-  Serial.print(distance_raw_raising());
-  Serial.print(" \\ ");
-  Serial.print(distance_raw_falling());
-  Serial.print(" pins=");
-  Serial.print(distance_raw_portstate());
-  Serial.print(") Compas: ");
-  Serial.print((int)compas_get_heading());
-  Serial.print(" [");
-  Serial.print(compas_get_x());
-  Serial.print("; ");
-  Serial.print(compas_get_y());
-  Serial.print("; ");
-  Serial.print(compas_get_z());
-  Serial.print("] batt=");
-  Serial.print(millivolt);
-  Serial.println("mV");
+  static unsigned char print_delay = 0;
+  if ((print_delay++ & 0x7) == 0) //period
+  {
+    Serial.print("Distance: ~");
+    Serial.print(d);
+    Serial.print(" cm (<-> ");
+    Serial.print(distance_raw_distance());
+    Serial.print(" / ");
+    Serial.print(distance_raw_raising());
+    Serial.print(" \\ ");
+    Serial.print(distance_raw_falling());
+    Serial.print(" pins=");
+    Serial.print(distance_raw_portstate());
+    Serial.print(") Compas: ");
+    Serial.print((int)compas_get_heading());
+    Serial.print(" [");
+    Serial.print(compas_get_x());
+    Serial.print("; ");
+    Serial.print(compas_get_y());
+    Serial.print("; ");
+    Serial.print(compas_get_z());
+    Serial.print("] batt=");
+    Serial.print(millivolt);
+    Serial.println("mV");
+  }
 
   const unsigned char T00 = 20;
   const unsigned char T0 = 25;
@@ -131,9 +140,9 @@ void distance_loop()
     lights_set_rearlight(25);
 
   if(d < T2)
-    lights_set_headlight(30);  
+    lights_set_headlight(10);  
   else
-    lights_set_headlight(128);
+    lights_set_headlight(50);
 }
 
 int dir = 0;
@@ -183,12 +192,14 @@ void twitchy_loop()
     if (++indicatorDelay >= 17) //every 1/3 sec
     {  
       indicatorDelay = 0;
-      if (indicatorState == 0 || indicatorState == 0x40)
-        indicatorState = 0x01;
-      else if (indicatorState == 0x04)
-        indicatorState = 0x10;
-      else
-        indicatorState <<= 1;
+      switch (indicatorState)
+      {
+        case 0x01: indicatorState = 0x04; break; // left front -> left rear
+        case 0x04: indicatorState = 0x40; break; // left rear -> right rear
+        case 0x40: indicatorState = 0x10; break; // right rear -> right front
+        case 0x10: indicatorState = 0x01; break; // right front -> left front
+        default: indicatorState = 0x01; break; 
+      }
       PORTA = indicatorState;
     }
     

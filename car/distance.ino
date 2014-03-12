@@ -61,10 +61,10 @@ void distance_setup()
 // Returns approximate centimers to target. Value 255 is used for "clear" path.
 // Returns 0 for sensor erros
 unsigned char distance_forward() { return m_distance_forward; }
-// unsigned char forward_left()
-// unsigned char forward_right()
-// unsigned char rear_left()
-// unsigned char rear_right() 
+unsigned char distance_forward_left() { return 0; }
+unsigned char distance_forward_right() { return 0; }
+unsigned char distance_rear_left() { return 0; }
+unsigned char distance_rear_right()  { return 0; }
 
 ISR(PCINT2_vect)
 {
