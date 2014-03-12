@@ -14,7 +14,11 @@ void distance_setup()
   // Timer 5
   //   WGM3:0 = mode 15 (PWM up to ICR5)
   // Pin 46 ultrasound module trigger (timer5 port A)
+  // Pin 45 ultrasound module trigger (timer5 port B)
+  // Pin 44 ultrasound module trigger (timer5 port C)
   pinMode(46, OUTPUT);
+  pinMode(45, OUTPUT);
+  pinMode(44, OUTPUT);
   //
   // Ultrasound_accuracy describes the number of mm every counter tick. The ultrasound pulse is send, bounced back and received.
   // A pulse of 58us means a object is 1cm away.
@@ -32,8 +36,10 @@ void distance_setup()
   ICR5 = (80*250);
   // Fist pulse should be 10us
   OCR5A = 3;                              // 12 us <<--------------- ISSUE!!!
+  OCR5B = 3;                              // 12 us <<--------------- ISSUE!!!
+  OCR5C = 3;                              // 12 us <<--------------- ISSUE!!!
   // Configure timer with above settings
-  TCCR5A = _BV(COM5A1) | _BV(WGM51); // COMnx[1:0] = clear on compare, WGM[1:0] see up
+  TCCR5A = _BV(COM5A1) | _BV(COM5B1) | _BV(COM5C1) | _BV(WGM51); // COMnx[1:0] = clear on compare, WGM[1:0] see up
   TCCR5B = _BV(WGM53) | _BV(WGM52) | _BV(CS51) | _BV(CS50); // WGM[3:2] and CS[2:0] see up
   TCCR5C = 0; // FOCnx = 0
   
