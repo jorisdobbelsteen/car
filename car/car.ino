@@ -12,6 +12,7 @@
 #include <SPI.h>
 
 struct { void(*loop_func)(); void(*setup_func)(); const char* name; } programs[] = {
+  {selfdriving_loop, selfdriving_setup, "self-driving"},
   {distance_loop, NULL, "distance driving"},
   {compas_calibration_loop, compas_calibration_setup, "compas calibration"},
   {twitchy_loop, NULL, "simple 'twitchy' demo"}
@@ -32,7 +33,7 @@ void setup() {
   // i2c and digital compas
   Wire.begin();
   compas_setup();
-  compass_calibration_load_from_eeprom();
+  compas_calibration_load_from_eeprom();
   // SPI and radio
   SPI.begin();
   radio_setup();
@@ -43,7 +44,7 @@ void setup() {
   delay(500);
  
   Serial.println("welcome!");
-  
+ 
   // print main programs and allow user to choose
   for(size_t i = 0; i < (sizeof(programs)/sizeof(*programs)); ++i)
   {
@@ -51,7 +52,11 @@ void setup() {
     Serial.print(") ");
     Serial.println(programs[i].name);
   }
-  delay(1500);
+  for (unsigned int i = 0; i < 10; ++i)
+  {
+    lights_set_rearlight((i & 0x1) ? 0 : 128);
+    delay(150);
+  }
   int prog = Serial.parseInt();
   if (prog < 0 || prog >= (sizeof(programs)/sizeof(*programs)))
     prog = 0;
@@ -82,23 +87,20 @@ void distance_loop()
   if ((compas_delay++ & 0xf) == 0) //period
     compas_read();
   
-  // 0 = 0V; 1023 = 10V (5 volt, but we use a voltage divider /2)
-  int millivolt = analogRead(A0) * 10;
-  
   static unsigned char print_delay = 0;
-  if ((print_delay++ & 0x7) == 0) //period
+  if ((print_delay++ & 0x1f) == 0) //period
   {
-    Serial.print("Distance: ~");
+    Serial.print("Distance: [c=");
     Serial.print(d);
-    Serial.print(" cm (<-> ");
-    Serial.print(distance_raw_distance());
-    Serial.print(" / ");
-    Serial.print(distance_raw_raising());
-    Serial.print(" \\ ");
-    Serial.print(distance_raw_falling());
-    Serial.print(" pins=");
-    Serial.print(distance_raw_portstate());
-    Serial.print(") Compas: ");
+    Serial.print(" l=");
+    Serial.print(distance_forward_left());
+    Serial.print(" r=");
+    Serial.print(distance_forward_right());
+    Serial.print("; l=");
+    Serial.print(distance_rear_left());
+    Serial.print(" r=");
+    Serial.print(distance_rear_right());
+    Serial.print(" cm Compas: ");
     Serial.print((int)compas_get_heading());
     Serial.print(" [");
     Serial.print(compas_get_x());
@@ -107,25 +109,38 @@ void distance_loop()
     Serial.print("; ");
     Serial.print(compas_get_z());
     Serial.print("] batt=");
-    Serial.print(millivolt);
+    Serial.print(batt_get_millivolt());
     Serial.println("mV");
+
+    if (0) // debug ultrasound
+    {
+      for(unsigned char i = 0; i < 12; ++i)
+      {
+        Serial.print("[");
+        Serial.print((int)distance_debug_portstate(i));
+        Serial.print(", ");
+        Serial.print(distance_debug_timer(i));
+        Serial.print("]");
+      }
+      Serial.println();
+    }
   }
 
-  const unsigned char T00 = 20;
-  const unsigned char T0 = 25;
-  const unsigned char T1 = 40;
+  const unsigned char T00 = 40;
+  const unsigned char T0 = 45;
+  const unsigned char T1 = 60;
   const unsigned char T2 = 80;
   
   if (d < T00)
     drivetrain_set_power(-60);
   if (d < T0)
-    drivetrain_set_power(-50);
+    drivetrain_set_power(-57);
   else if (d < T1)
     drivetrain_set_power(0);
   else if (d < T2)
-    drivetrain_set_power(50);
+    drivetrain_set_power(57);
   else
-    drivetrain_set_power(55);
+    drivetrain_set_power(60);
     
   if(d < T0)
     lights_set_breaklight_on();
@@ -140,7 +155,7 @@ void distance_loop()
     lights_set_rearlight(25);
 
   if(d < T2)
-    lights_set_headlight(10);  
+    lights_set_headlight(10);
   else
     lights_set_headlight(50);
 }
@@ -188,7 +203,6 @@ void twitchy_loop()
         lights_set_breaklight_off();
     }
     
-    // TODO: Put this in lights_..
     if (++indicatorDelay >= 17) //every 1/3 sec
     {  
       indicatorDelay = 0;
@@ -200,7 +214,7 @@ void twitchy_loop()
         case 0x10: indicatorState = 0x01; break; // right front -> left front
         default: indicatorState = 0x01; break; 
       }
-      PORTA = indicatorState;
+      lights_set_indicator_override_mask(indicatorState);
     }
     
     Serial.print("Distance: ~");

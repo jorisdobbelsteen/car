@@ -6,7 +6,8 @@
 #define SERVO_MOTOR_DRIVE_OFFSET -15  // offset for sufficient engine power
 #define SERVO_MOTOR_DRIVE_SPEED  -25  // fraction of "speed" applied to this offset
 #define SERVO_MOTOR_SPEED_CUTOFF 2    // -SERVO_MOTOR_SPEED_CUTOFF till SERVO_MOTOR_SPEED_CUTOFF is treated as engine OFF
-#define SERVO_STEERING_CENTER 379
+
+#define SERVO_STEERING_CENTER 370
 #define SERVO_STEERING_SWING 72
 
 static signed char m_power;

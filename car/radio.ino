@@ -26,7 +26,7 @@ static unsigned char sendbuffer[32];
 
 void radio_tick()
 {
-  if (((unsigned int)millis() - last_broadcast) > 1000)
+  if (((unsigned int)millis() - last_broadcast) > 2000)
   {
     // broadcast every 1 second after previous, we got max 32 bytes of data
     sendbuffer[ 0] = 1; // message 1, general status
