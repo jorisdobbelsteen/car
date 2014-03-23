@@ -2,11 +2,29 @@
  * HMC5883L 3-axis compas module.
  *
  * Issue: compensation is required to correct for interference from the car's electronics and wiring. These
- *        cause reading issues. To correct, a calibration routine is required (since the wiring is bound to
- *        slightly modify every time). We need to store this data somewhere.
+ *        cause reading issues. Calibration values are handled by the compas_calibration module. Calibration
+ *        only support "offset" correction, no relative axis compenstation.
  *        See http://www.jameco.com/Jameco/Products/ProdDS/2150248.pdf for extensive documentation of
  *        performing corrections.
  *
+ * API:
+ *  void compas_setup()
+ *      Initialized compas module.
+ *  void compas_read()
+ *      Read-out HCL5883L.
+ *  compas_get_heading()
+ *      Get current heading (to magnetic north) in degrees 0-359.
+ *
+ * Extra functions:
+ *  int compas_get_x()
+ *  int compas_get_y()
+ *  int compas_get_z()
+ *      Read raw compensated values from the sensor. Used by calibration routine.
+ * void compas_set_calibration(int offx, int offy, int offz)
+ * int compas_get_calibration_offset_x()
+ * int compas_get_calibration_offset_y()
+ * int compas_get_calibration_offset_z()
+ *      Set and get sensor offset calibration.
  */
 
 #include <Wire.h>
@@ -114,17 +132,17 @@ int compas_get_heading()
 
 int compas_get_x()
 {
-  return data_x();
+  return data_x() - offset_x;
 }
 
 int compas_get_y()
 {
-  return data_y();
+  return data_y() - offset_y;
 }
 
 int compas_get_z()
 {
-  return data_z();
+  return data_z() - offset_z;
 }
 
 static unsigned int compas_fast_arctan(int x, int y)

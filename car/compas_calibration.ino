@@ -1,13 +1,24 @@
+/*
+ * Calibration support functiona and program for HMC5883L 3-axis compas module.
+ *
+ * API:
+ *  void compas_calibration_load_from_eeprom()
+ *      Loads calibration values saved in EEPROM into compas value
+ */
+
+// EEPROM starting location for compas, 6 bytes currently.
+#define EEPROM_COMPAS_ADDR 1024
+ 
 static int calib_x_min, calib_y_min, calib_z_min;
 static int calib_x_max, calib_y_max, calib_z_max;
 
 #include <EEPROM.h>
 
-#define EEPROM_COMPAS_ADDR 1024
-
-void compass_calibration_load_from_eeprom()
+void compas_calibration_load_from_eeprom()
 {
-  compas_set_calibration(EEPROM_read_int(EEPROM_COMPAS_ADDR), EEPROM_read_int(EEPROM_COMPAS_ADDR+2), EEPROM_read_int(EEPROM_COMPAS_ADDR+4));
+  compas_set_calibration(EEPROM_read_int(EEPROM_COMPAS_ADDR),
+                         EEPROM_read_int(EEPROM_COMPAS_ADDR+2),
+                         EEPROM_read_int(EEPROM_COMPAS_ADDR+4));
 }
 
 static void compas_calibration_print()
@@ -40,9 +51,10 @@ void compas_calibration_loop()
   
   compas_read();
 
-  int x = compas_get_x();
-  int y = compas_get_y();
-  int z = compas_get_z();
+  // read values, these are compenstated, so "uncompensate as well".
+  int x = compas_get_x() + compas_get_calibration_offset_x();
+  int y = compas_get_y() + compas_get_calibration_offset_y();
+  int z = compas_get_z() + compas_get_calibration_offset_z();
   
   if (x < calib_x_min)
     calib_x_min = x;
