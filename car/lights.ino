@@ -1,6 +1,33 @@
 /*
  * Lights controller
+ *
+ * TODO: - For PWM outputs, turn them off completely (pin to input) when set to 0.
+ *
+ * API:
+ *   void lights_setup()
+ *       Initializes lights module
+ *   void lights_set_headlight(unsigned char intensity)
+ *   void lights_set_headlight(unsigned char left, unsigned char right)
+ *       Set intensity of headlights between 0 (off) and 255 (fully on). Can be set independently, but convienience function is provided to set both at once.
+ *   void lights_set_rearlight(unsigned char intensity)
+ *       Set intensity of rear lights between 0 (off) and 255 (fully on).
+ *       At 255 they are as intense as the break light, so recommended values are 0 for off, 80 for "normal" rearlight and 255 when "combining" with breaklight.
+ *   void lights_set_breaklight_on()
+ *   void lights_set_breaklight_off()
+ *       Turn breaklights on and off.
+ *   void lights_set_indicator_off()
+ *   void lights_set_indicator_left()
+ *   void lights_set_indicator_right()
+ *   void lights_set_indicator_both()
+ *   void lights_set_indicator(unsigned char left, unsigned char right)
+ *   void lights_set_indicator_mask(unsigned char mask)
+ *       Turn on indicator lights in blinking mode
+ *   void lights_set_indicator_override_mask(unsigned char mask)
+ *       Turn on indicator turned on fully
  */
+
+static unsigned char m_lights_indicator;
+static unsigned char m_lights_indicator_override;
  
 void lights_setup()
 {
@@ -36,6 +63,12 @@ void lights_setup()
   pinMode(28, OUTPUT);
   pinMode(29, OUTPUT);
 
+  // turn off indicators
+  m_lights_indicator = 0;
+  m_lights_indicator_override = 0;
+  // Enable timer interrupt
+  TIMSK4 = _BV(TOIE4);
+
   // breaklight
   pinMode(4, OUTPUT);
   lights_set_breaklight_off();
@@ -56,4 +89,33 @@ void lights_set_rearlight(unsigned char intensity)
 void lights_set_breaklight_on()  { digitalWrite(4, HIGH); }
 void lights_set_breaklight_off() { digitalWrite(4, LOW);  }
 
+unsigned char m_lights_isr_prescaler;
+unsigned char m_lights_isr_count;
+// Timer4 overflow, at 1KHz.. Needs to be fast not to interfere with distance software!
+// We should piggyback on the 61 Hz drivetrain timer instead???
+ISR(TIMER4_OVF_vect)
+{
+  if((++m_lights_isr_prescaler & 0x3f) == 0)
+  {
+    // 16 Hz indicator speeds.
+    if (m_lights_indicator != 0)
+    {
+      PORTA = ((++m_lights_isr_count & (1<<4)) ? 0 : m_lights_indicator) | m_lights_indicator_override;
+    }
+    else
+    {
+      PORTA = m_lights_indicator_override;
+      m_lights_isr_count = 0;
+    }
+  }
+}
+
+void lights_set_indicator_off()                                    { m_lights_indicator = 0; }
+void lights_set_indicator_left()                                   { m_lights_indicator = 0xf0; }
+void lights_set_indicator_right()                                  { m_lights_indicator = 0x0f; }
+void lights_set_indicator_both()                                   { m_lights_indicator = 0xff; }
+void lights_set_indicator(unsigned char left, unsigned char right) { m_lights_indicator = (left ? 0xf0 : 0) | (right ? 0x0f : 0); }
+void lights_set_indicator_mask(unsigned char mask)                 { m_lights_indicator = mask; }
+
+void lights_set_indicator_override_mask(unsigned char mask)        { m_lights_indicator_override = mask; }
 
