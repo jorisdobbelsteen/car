@@ -1,8 +1,6 @@
 /*
  * Lights controller
  *
- * TODO: - For PWM outputs, turn them off completely (pin to input) when set to 0.
- *
  * API:
  *   void lights_setup()
  *       Initializes lights module
@@ -43,9 +41,9 @@ void lights_setup()
   //   Pin 6 left headlight  = Timer Output A
   //   Pin 7 right headlight = Timer Output B
   //   Pin 8 rearlights      = Timer Output C
-  pinMode(6, OUTPUT);
-  pinMode(7, OUTPUT);
-  pinMode(8, OUTPUT);
+  pinMode(6, INPUT);
+  pinMode(7, INPUT);
+  pinMode(8, INPUT);
   TCCR4A = _BV(COM4A1) | _BV(COM4B1) | _BV(COM4C1) | _BV(WGM40); // COMnx[1:0] = clear on compare, WGM[1:0] see up
   TCCR4B = _BV(WGM42) | _BV(CS41) | _BV(CS40); // WGM[3:2] and CS[2:0] see up
   TCCR4C = 0; // FOCnx = 0
@@ -78,12 +76,15 @@ void lights_set_headlight(unsigned char intensity) { lights_set_headlight(intens
 void lights_set_headlight(unsigned char left, unsigned char right)
 {
   OCR4A = left;
+  pinMode(6, (left == 0) ? INPUT : OUTPUT);
   OCR4B = right;
+  pinMode(7, (right == 0) ? INPUT : OUTPUT);
 }
 
 void lights_set_rearlight(unsigned char intensity)
 {
   OCR4C = intensity;
+  pinMode(8, (intensity == 0) ? INPUT : OUTPUT);
 }
 
 void lights_set_breaklight_on()  { digitalWrite(4, HIGH); }
@@ -100,7 +101,7 @@ ISR(TIMER4_OVF_vect)
     // 16 Hz indicator speeds.
     if (m_lights_indicator != 0)
     {
-      PORTA = ((++m_lights_isr_count & (1<<4)) ? 0 : m_lights_indicator) | m_lights_indicator_override;
+      PORTA = ((++m_lights_isr_count & (1<<2)) ? 0 : m_lights_indicator) | m_lights_indicator_override;
     }
     else
     {
