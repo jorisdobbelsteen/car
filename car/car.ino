@@ -15,6 +15,7 @@ struct { void(*loop_func)(); void(*setup_func)(); const char* name; } programs[]
   {selfdriving_loop, selfdriving_setup, "self-driving"},
   {distance_loop, NULL, "distance driving"},
   {compas_calibration_loop, compas_calibration_setup, "compas calibration"},
+  {steering_loop, NULL, "steering test"},
   {twitchy_loop, NULL, "simple 'twitchy' demo"}
 };
 void(*current_loop_func)();
@@ -26,7 +27,10 @@ void setup() {
   Serial.begin(57600);
   printf_begin(); // RF24 uses this...
   Serial.print("Car ");
-  
+
+  // System internals
+  batt_setup();
+  // Car exterior initialization  
   drivetrain_setup();
   lights_setup();
   distance_setup();
@@ -44,6 +48,10 @@ void setup() {
   delay(500);
  
   Serial.println("welcome!");
+  
+  Serial.print("Battery ");
+  Serial.print(batt_get_millivolt());
+  Serial.println(" mv");
  
   // print main programs and allow user to choose
   for(size_t i = 0; i < (sizeof(programs)/sizeof(*programs)); ++i)
@@ -72,6 +80,7 @@ void setup() {
 void loop()
 {
   // handle modules
+  drivetrain_tick();
   radio_tick();
   // run selected program
   current_loop_func();
@@ -222,3 +231,10 @@ void twitchy_loop()
     Serial.println(" cm");
 }
 
+void steering_loop()
+{
+  drivetrain_set_steer(-127);
+  delay(1050);
+  drivetrain_set_steer(127);
+  delay(1000);
+}

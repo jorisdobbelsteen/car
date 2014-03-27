@@ -3,15 +3,25 @@
 /*
  * Battery voltage readout
  */
-static unsigned int batt_last_millivolt = 7200; // filtering (dampening measurement)
+static unsigned int batt_last_millivolt; // filtering (dampening measurement)
+void batt_setup()
+{
+  batt_last_millivolt = analogRead(A0); // initialize
+}
 unsigned int batt_get_millivolt()
 {
   // 0 = 0V; 1023 = 10V (5 volt, but we use a voltage divider /2)
   // However on servo it's 1023 = 9.6V (power is 4.8V)
-  unsigned int value = analogRead(A0);
-  batt_last_millivolt = (batt_last_millivolt / 2) + (value * (10 / 2));
-  return batt_last_millivolt - (batt_last_millivolt >> 6); // value correction
-  //return value * 10;
+  
+  // Read value from ADC and average with recent data
+  unsigned int newvalue = analogRead(A0);
+  newvalue += batt_last_millivolt * 31;
+  newvalue /= 32;
+  batt_last_millivolt = newvalue;
+  
+  // Output in millivolts
+  newvalue *= 10;
+  return newvalue - (newvalue >> 6); // value correction
 }
 
 /*
