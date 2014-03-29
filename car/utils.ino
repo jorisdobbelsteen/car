@@ -25,6 +25,18 @@ unsigned int batt_get_millivolt()
 }
 
 /*
+ * Safety signal
+ */
+void utils_setup()
+{
+  pinMode(12,INPUT_PULLUP);
+}
+bool utils_program_enable()
+{
+  return digitalRead(12) == LOW;
+}
+
+/*
  * sort function
  */
 void utils_sort(unsigned char* a, unsigned char n)

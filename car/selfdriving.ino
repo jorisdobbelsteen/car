@@ -31,6 +31,7 @@ static enum SelfDrivingState
   STATE_ResolveDecision,
   STATE_ResolveForward,
   STATE_ResolveReverse,
+  STATE_SoftOff,
   STATE_BatteryLow
 } current_state;
 
@@ -65,6 +66,8 @@ unsigned char m_Resolve_forward_left[5];
 unsigned char m_Resolve_forward_right[5];
 unsigned char m_Resolve_rear_left[5];
 unsigned char m_Resolve_rear_right[5];
+// SoftOff
+unsigned char m_SoftOff_count;
 
 /*
  * State machine
@@ -74,6 +77,7 @@ void selfdriving_loop()
 {
   // override for low battery detection...
   if(++battery_delay == 0 && batt_get_millivolt() < 6800 && current_state != STATE_BatteryLow) /* If voltage is below 6.9 volt, shutdown, if not already done */ { current_state = STATE_BatteryLow; entering = true; }
+  else if(current_state != STATE_BatteryLow && current_state != STATE_SoftOff && !utils_program_enable()) /* If program switch does not authorize driving */ { current_state = STATE_SoftOff; entering = true; }
   
   BEGIN_STATEMACHINE
   ATSTATE(Start)
@@ -173,21 +177,21 @@ void selfdriving_loop()
     if(entering)
     {
       // set drivetrain in reverse direction than before...
-      drivetrain_set_power(-60); // extensive breaking
+      drivetrain_set_power(-80); // extensive breaking
       lights_set_breaklight_on();
       lights_set_rearlight(255); // break...
       StartWaiting();
     }
-    if (WaitingFor(500)) // for 500 ms
+    if (WaitingFor(1000)) // for 500 ms
     {
       drivetrain_set_power(0);
       lights_set_rearlight(rearlight_normal);
       lights_set_breaklight_off();
       NEXT_STATE(ReverseDecision);
     }
-    else if (WaitingFor(200)) // after initial extensive break, just normally
+    else if (WaitingFor(400)) // after initial extensive break, just normally
     {
-      drivetrain_set_power(-20); // normal breaking, prevent reversing
+      drivetrain_set_power(-40); // normal breaking, prevent reversing
     }
   }
   ATSTATE(ReverseDecision)
@@ -396,14 +400,53 @@ void selfdriving_loop()
       drivetrain_set_power(0);
     }
   }
-  ATSTATE(BatteryLow)
+  ATSTATE(SoftOff)
   {
-    // Turn off most systems
     if(entering)
     {
       // TODO: SHOULD BREAK!!!
       lights_set_headlight(0);
       lights_set_rearlight(0);
+      lights_set_breaklight_off();
+      lights_set_indicator_both();
+      drivetrain_set_power(0);
+      
+      StartWaiting();
+      m_SoftOff_count = 0; // used for blinking rear lights
+    }
+    if(utils_program_enable())
+    {
+      NEXT_STATE(Start);
+    }
+    else if(WaitingFor(200))
+    {
+      m_SoftOff_count++;
+      if (m_SoftOff_count & 0x1)
+      {
+        lights_set_breaklight_on();
+        lights_set_rearlight(255);
+      }
+      else
+      {
+        lights_set_breaklight_off();
+        lights_set_rearlight(0);
+      }
+      StartWaiting();
+    }
+    if(CanPrintStatus())
+    {
+      Serial.println("Driving disabled...");
+    }
+  }
+  ATSTATE(BatteryLow)
+  {
+    // Turn off most systems -- dead end...
+    if(entering)
+    {
+      // TODO: SHOULD BREAK!!!
+      lights_set_headlight(0);
+      lights_set_rearlight(0);
+      lights_set_breaklight_off();
       lights_set_indicator_both();
       drivetrain_set_power(0);
     }

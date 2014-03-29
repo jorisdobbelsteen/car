@@ -29,6 +29,7 @@ void setup() {
   Serial.print("Car ");
 
   // System internals
+  utils_setup();
   batt_setup();
   // Car exterior initialization  
   drivetrain_setup();
