@@ -32,6 +32,7 @@ static enum SelfDrivingState
   STATE_ResolveForward,
   STATE_ResolveReverse,
   STATE_SoftOff,
+  STATE_SoftOffWait,
   STATE_BatteryLow
 } current_state;
 
@@ -255,17 +256,19 @@ void selfdriving_loop()
   {
     if(entering)
     {
+      compas_read();
       m_Reverse_CompassStart = compas_get_heading();
       lights_set_headlight(1);
       drivetrain_set_power(power_reverse_accelerate);
       StartWaiting();
     }
     // Get heading compute delta
+    compas_read();
     int deltaHeading = abs(compas_get_heading() - m_Reverse_CompassStart);
     while(deltaHeading >= 360) deltaHeading -= 360; // remove full rotation
     // decision...
-    if(WaitingFor(2600)
-      || deltaHeading > 60 // max 60 degree turn at most ???
+    if(WaitingFor(2000)
+      || (WaitingFor(600) && deltaHeading > 50) // max 50 degree turn (very approximately...) + some overshoot from stopping... Give at least 0.6 seconds always!
       || distance_rear_left() < 38 // only 38 cm margin, since we should be going slowly backward, so would work?
       || distance_rear_right() < 38)
     {
@@ -410,15 +413,16 @@ void selfdriving_loop()
       lights_set_breaklight_off();
       lights_set_indicator_both();
       drivetrain_set_power(0);
+      drivetrain_set_steer(0);
       
       StartWaiting();
       m_SoftOff_count = 0; // used for blinking rear lights
     }
     if(utils_program_enable())
     {
-      NEXT_STATE(Start);
+      NEXT_STATE(SoftOffWait);
     }
-    else if(WaitingFor(200))
+    else if(WaitingFor(1000))
     {
       m_SoftOff_count++;
       if (m_SoftOff_count & 0x1)
@@ -435,7 +439,39 @@ void selfdriving_loop()
     }
     if(CanPrintStatus())
     {
-      Serial.println("Driving disabled...");
+      Serial.print("Driving disabled. Heading ");
+      compas_read();
+      Serial.print((int)compas_get_heading());
+      Serial.print(" deg; batt ");
+      Serial.print(batt_get_millivolt());
+      Serial.println(" mv");
+    }
+  }
+  ATSTATE(SoftOffWait) // give couple seconds before actually starting
+  {
+    if(entering)
+    {
+      // TODO: SHOULD BREAK!!!
+      lights_set_headlight(headlight_dipped);
+      lights_set_rearlight(255);
+      lights_set_breaklight_on();
+      lights_set_indicator_both();
+      
+      StartWaiting();
+    }
+    if(WaitingFor(3000))
+    {
+      lights_set_headlight(headlight_dipped);
+      NEXT_STATE(Start);
+    }
+    else if(WaitingFor(2000))
+    {
+      lights_set_indicator_off();
+      lights_set_headlight(headlight_main);
+    }
+    if(CanPrintStatus())
+    {
+      Serial.println("Driving engaging soon...");
     }
   }
   ATSTATE(BatteryLow)
