@@ -16,9 +16,9 @@
 #define SERVO_MOTOR_DRIVE_CENTER 374  // zero position
 #define SERVO_MOTOR_DRIVE_OFFSET   5  // offset for sufficient engine power
 // NOTE (abs(SERVO_MOTOR_DRIVE_SPEED) + abs(SERVO_MOTOR_DRIVE_BATTERY_COMPENSATION)) < 60 !!! OTHERWISE MODIFY CODE
-#define SERVO_MOTOR_DRIVE_SPEED   38  // fraction of "speed" applied to this offset.
+#define SERVO_MOTOR_DRIVE_SPEED   37  // fraction of "speed" applied to this offset.
 #define SERVO_MOTOR_DRIVE_BATTERY_COMPENSATION   -8 // PWM value compensation per volt above batery center voltage.  // 1 volt @ 7.4 volt means 30% power
-#define SERVO_MOTOR_DRIVE_BATTERY_CENTER       7400 // battery center value
+#define SERVO_MOTOR_DRIVE_BATTERY_CENTER       7300 // battery center value
 #define SERVO_MOTOR_SPEED_CUTOFF   2  // -SERVO_MOTOR_SPEED_CUTOFF till SERVO_MOTOR_SPEED_CUTOFF is treated as engine OFF
 
 
