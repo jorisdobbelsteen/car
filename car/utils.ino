@@ -25,6 +25,24 @@ unsigned int batt_get_millivolt()
 }
 
 /*
+ * sort function
+ */
+void utils_sort(unsigned char* a, unsigned char n)
+{
+  for (unsigned char i = 1; i < n; ++i)
+  {
+    unsigned char j = a[i];
+    unsigned char k;
+    for (k = i; (k > 0) && (j < a[k-1]); k--)
+    {
+      a[k] = a[k-1];
+    }
+    a[k] = j;
+  }
+}
+
+
+/*
  * EEPROM helper routines
  */
 int EEPROM_read_int(int address)

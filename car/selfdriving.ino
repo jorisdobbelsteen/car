@@ -1,13 +1,13 @@
 // Constants
-const unsigned char headlight_dipped = 60;
-const unsigned char headlight_main = 180;
-const unsigned char rearlight_normal = 60;
+const unsigned char headlight_dipped = 50;
+const unsigned char headlight_main = 200;
+const unsigned char rearlight_normal = 40;
 
-const char power_forward_normal = 57;
-const char power_forward_accelerate = 66;
-const unsigned char power_forward_accelerate_duration = 80; //ms
-const char power_reverse_normal = -65;
-const char power_reverse_accelerate = -80;
+const char power_forward_normal = 63;
+const char power_forward_accelerate = 90;
+const unsigned char power_forward_accelerate_duration = 100; //ms
+const char power_reverse_normal = -62;
+const char power_reverse_accelerate = -70;
 const unsigned char power_reverse_accelerate_duration = 80; //ms
 
 // State machine helpers
@@ -27,6 +27,10 @@ static enum SelfDrivingState
   STATE_BreakForward,
   STATE_ReverseDecision,
   STATE_Reverse,
+  STATE_ResolveStart,
+  STATE_ResolveDecision,
+  STATE_ResolveForward,
+  STATE_ResolveReverse,
   STATE_BatteryLow
 } current_state;
 
@@ -44,12 +48,32 @@ static enum SelfDrivingState
  *      previous time it returned true is 350 ms (or other configured time) ago.
  */
 
+/*
+ * Variables for various states
+ */
+// ReverseDecision
+unsigned char m_ReverseDecision_count;
+unsigned char m_ReverseDecision_left[5];
+unsigned char m_ReverseDecision_right[5];
+ // Reverse state
+int           m_Reverse_CompassStart;
+// Resolve*** states
+bool          m_Resolve_direction;
+unsigned char m_Resolve_count;
+unsigned char m_Resolve_forward[5];
+unsigned char m_Resolve_forward_left[5];
+unsigned char m_Resolve_forward_right[5];
+unsigned char m_Resolve_rear_left[5];
+unsigned char m_Resolve_rear_right[5];
 
+/*
+ * State machine
+ */
 static unsigned char battery_delay;
 void selfdriving_loop()
 {
   // override for low battery detection...
-  if(++battery_delay == 0 && batt_get_millivolt() < 6900 && current_state != STATE_BatteryLow) /* If voltage is below 6.9 volt, shutdown, if not already done */ { current_state = STATE_BatteryLow; entering = true; }
+  if(++battery_delay == 0 && batt_get_millivolt() < 6800 && current_state != STATE_BatteryLow) /* If voltage is below 6.9 volt, shutdown, if not already done */ { current_state = STATE_BatteryLow; entering = true; }
   
   BEGIN_STATEMACHINE
   ATSTATE(Start)
@@ -101,10 +125,16 @@ void selfdriving_loop()
       // slowly move forward
       drivetrain_set_power( power_forward_normal );
       drivetrain_set_steer( 0 );
+      StartWaiting();
     }
-    if(distance_forward() < 70                            // getting closeby
-        || distance_forward_left() < 30
-        || distance_forward_right() < 30)
+    bool atSpeed = WaitingFor(500);
+    if(   (atSpeed &&  (distance_forward() < 70
+                        || distance_forward_left() < 30
+                        || distance_forward_right() < 30))
+       || (!atSpeed && (distance_forward() < 60
+                        || distance_forward_left() < 15
+                        || distance_forward_right() < 15))
+      )
     {
       NEXT_STATE(BreakForward);
     }
@@ -145,49 +175,74 @@ void selfdriving_loop()
       // set drivetrain in reverse direction than before...
       drivetrain_set_power(-60); // extensive breaking
       lights_set_breaklight_on();
+      lights_set_rearlight(255); // break...
       StartWaiting();
     }
-    if (distance_forward() < 20 || distance_forward_left() < 15 || distance_forward_right() < 15) // danger ... too close
-    {
-      lights_set_rearlight(255);
-      drivetrain_set_power(-60); // hard breaking/reversing
-    }
-    else if (WaitingFor(500)) // for 500 ms
+    if (WaitingFor(500)) // for 500 ms
     {
       drivetrain_set_power(0);
       lights_set_rearlight(rearlight_normal);
       lights_set_breaklight_off();
       NEXT_STATE(ReverseDecision);
     }
-    else if (WaitingFor(120)) // after initial extensive break, just normally
+    else if (WaitingFor(200)) // after initial extensive break, just normally
     {
-      lights_set_rearlight(rearlight_normal);
-      drivetrain_set_power(-20); // normal breaking
+      drivetrain_set_power(-20); // normal breaking, prevent reversing
     }
   }
   ATSTATE(ReverseDecision)
   {
+    bool left = false;
+    bool right = false;
     if(entering)
     {
-      StartWaiting();
+      m_ReverseDecision_count = 0; // reset measurement counter
+      left = drivetrain_get_steer() < -10; // was going left...
+      right = drivetrain_get_steer() > 10; // was going right
     }
-    bool left = entering && (drivetrain_get_steer() < -10);
-    bool right = entering && (drivetrain_get_steer() > 10);
-    if(!left && !right)
+    else
     {
-      // make random decision... But can also make informed decision...
-      if(millis() & 0x1)
-        left = true;
-      else
-        right = true;
+      if (distance_updated()) // take measurement counter
+      {
+        m_ReverseDecision_left[m_ReverseDecision_count] = distance_forward_left();
+        m_ReverseDecision_right[m_ReverseDecision_count] = distance_forward_right();
+        m_ReverseDecision_count++;
+        
+        if (m_ReverseDecision_count == 5)
+        {
+          // pick median
+          utils_sort(m_ReverseDecision_left, 5);
+          utils_sort(m_ReverseDecision_right, 5);
+          unsigned char left_distance = m_ReverseDecision_left[2];
+          unsigned char right_distance = m_ReverseDecision_right[2];
+          // make random decision... but more likely a informed decision --> 1 to 15
+          unsigned char randval = millis();
+          bool dorandom = (randval & 0xf0) == 0;
+          // actual decision
+          if((dorandom && (randval & 0x1)) || (!dorandom && left_distance > right_distance))
+            left = true;
+          else
+            right = true;
+            
+          lights_set_headlight(headlight_dipped);
+        }
+        else
+        {
+          lights_set_headlight(headlight_main); // flash headlights a bit...
+        }
+      }
     }
-    if(left) // steer negative (forward), so positive (reverse)
+    if(left) // was going left or more distance there...
     {
+      // turn right when reversing, so front lines up to left
+      lights_set_indicator_right();
       drivetrain_set_steer(110);
       NEXT_STATE(Reverse);
     }
     else if (right)  // steer postive (forward), so negative (reverse)
     {
+      // turn left when reversing, so front lines up to right
+      lights_set_indicator_left();
       drivetrain_set_steer(-110);
       NEXT_STATE(Reverse);
     }
@@ -196,17 +251,27 @@ void selfdriving_loop()
   {
     if(entering)
     {
+      m_Reverse_CompassStart = compas_get_heading();
       lights_set_headlight(1);
       drivetrain_set_power(power_reverse_accelerate);
       StartWaiting();
     }
-    if(WaitingFor(5000)
-      || distance_rear_left() < 40
-      || distance_rear_right() < 40)
+    // Get heading compute delta
+    int deltaHeading = abs(compas_get_heading() - m_Reverse_CompassStart);
+    while(deltaHeading >= 360) deltaHeading -= 360; // remove full rotation
+    // decision...
+    if(WaitingFor(2600)
+      || deltaHeading > 60 // max 60 degree turn at most ???
+      || distance_rear_left() < 38 // only 38 cm margin, since we should be going slowly backward, so would work?
+      || distance_rear_right() < 38)
     {
+      lights_set_indicator_off();
       drivetrain_set_steer(0); // choose left or right at random
       drivetrain_set_power(0);
-      NEXT_STATE(DriveForward);
+      if(distance_forward() < 75) // getting closeby, so driving forward will abort anyways...
+        NEXT_STATE(ResolveStart);
+      else
+        NEXT_STATE(DriveForward);
     }
     else if(WaitingFor(power_reverse_accelerate_duration))
     {
@@ -216,10 +281,119 @@ void selfdriving_loop()
     {
       Serial.print("reversing ");
       selfdriving_print_distance_rear();
-      Serial.print(" batt ");
+      Serial.print(" turn ");
+      Serial.print(deltaHeading);
+      Serial.print(" deg batt ");
       Serial.print(batt_get_millivolt());
       Serial.print(" mv");
       Serial.println();
+    }
+  }
+  /*
+   * Resolving is a more powerful turning logic that scans to go a certain direction
+   */
+  ATSTATE(ResolveStart)
+  {
+    // decide direction...
+    m_Resolve_direction = millis() & 0x1;
+    lights_set_indicator_both();
+    NEXT_STATE(ResolveDecision);
+  }
+  ATSTATE(ResolveDecision)
+  {
+    // measure a bit ...
+    if(entering)
+    {
+      m_Resolve_count = 0; // reset measurement counter
+      distance_updated();
+    }
+    else if (distance_updated()) // take measurement counter
+    {
+      m_Resolve_forward[m_Resolve_count] = distance_forward();
+      m_Resolve_forward_left[m_Resolve_count] = distance_forward_left();
+      m_Resolve_forward_right[m_Resolve_count] = distance_forward_right();
+      m_Resolve_rear_left[m_Resolve_count] = distance_rear_left();
+      m_Resolve_rear_right[m_Resolve_count] = distance_rear_right();
+      m_Resolve_count++;
+      
+      if (m_Resolve_count == 5)
+      {
+        utils_sort(m_Resolve_forward, 5);
+        utils_sort(m_Resolve_forward_left, 5);
+        utils_sort(m_Resolve_forward_right, 5);
+        utils_sort(m_Resolve_rear_left, 5);
+        utils_sort(m_Resolve_rear_right, 5);
+        
+        if (m_Resolve_forward[2] > 180
+            && m_Resolve_forward_left[2] > 35
+            && m_Resolve_forward_right[2] > 35)
+        {
+          // Plenty of space, so we can go ...
+          drivetrain_set_steer(0);
+          lights_set_indicator_off();
+          NEXT_STATE(DriveForward);
+        }
+        else
+        {
+          unsigned char forward_side = min(m_Resolve_forward_left[2], m_Resolve_forward_right[2]);
+          unsigned char forward = min(m_Resolve_forward[2], (forward_side > 127) ? 255 : (forward_side * 2)); // left and right sensors get a little benefit...
+          unsigned char reverse = min(m_Resolve_rear_left[2], m_Resolve_rear_right[2]);
+          if (forward > reverse) // more distance forward
+            NEXT_STATE(ResolveForward);
+          else
+            NEXT_STATE(ResolveReverse);
+        }
+      }
+    }
+  }
+  ATSTATE(ResolveForward)
+  {
+    if(entering)
+    {
+      StartWaiting();
+      drivetrain_set_steer(m_Resolve_direction ? -110 : 110);
+      drivetrain_set_power(power_forward_accelerate);
+    }
+    if (WaitingFor(650))
+    {
+      NEXT_STATE(ResolveDecision);
+    }
+//    else if (WaitingFor(600))
+//    {
+//      drivetrain_set_power(-10);
+//    }
+    else if(WaitingFor(power_forward_accelerate_duration))
+    {
+      drivetrain_set_power(power_forward_normal);
+    }
+    if(exiting)
+    {
+      drivetrain_set_power(0);
+    }
+  }
+  ATSTATE(ResolveReverse)
+  {
+    if(entering)
+    {
+      StartWaiting();
+      drivetrain_set_steer(m_Resolve_direction ? 110 : -110);
+      drivetrain_set_power(power_reverse_accelerate);
+    }
+    if (WaitingFor(650))
+    {
+      NEXT_STATE(ResolveDecision);
+    }
+//    else if (WaitingFor(600))
+//    {
+//      drivetrain_set_power(10);
+//    }
+    else if(WaitingFor(power_reverse_accelerate_duration))
+    {
+      drivetrain_set_power(power_reverse_normal);
+    }
+    if(exiting)
+    {
+      drivetrain_set_power(0);
     }
   }
   ATSTATE(BatteryLow)
